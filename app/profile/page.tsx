@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import Link from 'next/link';
-import { User as UserLucide, Mail, Calendar, Ruler, Weight, Target, Edit, Plus, TrendingUp, Award, Activity, Flame, Trophy, Clock, Zap, Camera, MapPin, UserCheck, Medal, X, Save, Globe, Map, AlertTriangle, Phone } from 'lucide-react';
+import { User as UserLucide, Mail, Calendar, Ruler, Weight, Target, Edit, Plus, TrendingUp, Award, Activity, Flame, Trophy, Clock, Zap, Camera, MapPin, UserCheck, Medal, X, Save, Globe, Map, AlertTriangle, Phone, Heart, Brain, Star } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import TopNavbar from '@/components/dashboard/TopNavbar';
 import { motion } from 'framer-motion';
@@ -335,6 +335,36 @@ export default function ProfilePage() {
   const competitionWinRate = calculateCompetitionWinRate();
   const monthlyActivityData = getMonthlyActivityData();
   const personalRecordsTimeline = getPersonalRecordsTimeline();
+
+  // Calculate Athlete Insights
+  const calculateBMI = () => {
+    if (!profile?.height || !profile?.weight) return null;
+    const heightInMeters = profile.height / 100;
+    const bmi = profile.weight / (heightInMeters * heightInMeters);
+    return Math.round(bmi * 10) / 10;
+  };
+
+  const getAthleteExperience = () => {
+    if (!profile?.training_experience) return 'Not specified';
+    const years = profile.training_experience;
+    if (years < 1) return 'Beginner (< 1 year)';
+    if (years < 3) return 'Intermediate (1-3 years)';
+    if (years < 5) return 'Advanced (3-5 years)';
+    return 'Elite (5+ years)';
+  };
+
+  const getPerformanceLevel = () => {
+    if (!profile?.personal_best) return 'Not specified';
+    const pb = profile.personal_best;
+    if (pb < 40) return 'Beginner';
+    if (pb < 50) return 'Intermediate';
+    if (pb < 60) return 'Advanced';
+    return 'Elite';
+  };
+
+  const bmi = calculateBMI();
+  const athleteExperience = getAthleteExperience();
+  const performanceLevel = getPerformanceLevel();
 
   const handleEditPersonalInfo = () => {
     setEditedProfile({
@@ -797,6 +827,69 @@ export default function ProfilePage() {
 
           {/* Profile Details */}
           <div className="p-6 sm:p-8">
+            {/* Athlete Insights Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="bg-gradient-to-br from-purple-500/10 to-blue-500/10 backdrop-blur-sm rounded-2xl p-6 sm:p-8 border border-purple-500/30 mb-8"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+                  <Brain className="w-5 h-5 text-purple-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white">Athlete Insights</h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* BMI */}
+                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 border border-slate-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Heart className="w-4 h-4 text-pink-400" />
+                    <span className="text-sm text-slate-400">BMI</span>
+                  </div>
+                  <p className="text-xl font-bold text-white">
+                    {bmi !== null ? bmi : 'N/A'}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {bmi !== null && bmi < 18.5 ? 'Underweight' : bmi !== null && bmi < 25 ? 'Normal' : bmi !== null && bmi < 30 ? 'Overweight' : bmi !== null ? 'Obese' : ''}
+                  </p>
+                </div>
+
+                {/* Athlete Experience */}
+                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 border border-slate-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Clock className="w-4 h-4 text-blue-400" />
+                    <span className="text-sm text-slate-400">Experience</span>
+                  </div>
+                  <p className="text-sm font-semibold text-white">
+                    {athleteExperience}
+                  </p>
+                </div>
+
+                {/* Performance Level */}
+                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 border border-slate-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Star className="w-4 h-4 text-yellow-400" />
+                    <span className="text-sm text-slate-400">Level</span>
+                  </div>
+                  <p className="text-sm font-semibold text-white">
+                    {performanceLevel}
+                  </p>
+                </div>
+
+                {/* Personal Best Summary */}
+                <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 border border-slate-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Trophy className="w-4 h-4 text-purple-400" />
+                    <span className="text-sm text-slate-400">Personal Best</span>
+                  </div>
+                  <p className="text-xl font-bold text-white">
+                    {profile.personal_best ? `${profile.personal_best}m` : 'N/A'}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+
             {/* Bio */}
             {profile.bio && (
               <div className="mb-8">
