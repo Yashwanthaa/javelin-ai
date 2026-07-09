@@ -77,6 +77,10 @@ export default function ProfilePage() {
   const [editedMedical, setEditedMedical] = useState<Partial<AthleteProfile>>({});
   const [isEditingEmergencyContact, setIsEditingEmergencyContact] = useState(false);
   const [editedEmergencyContact, setEditedEmergencyContact] = useState<Partial<AthleteProfile>>({});
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   useEffect(() => {
     async function fetchUserAndProfile() {
@@ -208,6 +212,138 @@ export default function ProfilePage() {
     ];
 
     return allFields.filter(field => !profile[field.key as keyof AthleteProfile]);
+  };
+
+  // Get user initials from name
+  const getUserInitials = (name?: string) => {
+    if (!name) return '?';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  // Validate image file
+  const validateImageFile = (file: File) => {
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    const maxSize = 5 * 1024 * 1024; // 5MB
+
+    if (!validTypes.includes(file.type)) {
+      alert('Please upload a JPG, PNG, or WEBP image');
+      return false;
+    }
+
+    if (file.size > maxSize) {
+      alert('File size must be less than 5MB');
+      return false;
+    }
+
+    return true;
+  };
+
+  // Handle file selection
+  const handleFileSelect = (file: File) => {
+    if (!validateImageFile(file)) return;
+
+    setAvatarFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAvatarPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle drag and drop
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  };
+
+  // Handle avatar upload
+  const handleAvatarUpload = async () => {
+    if (!avatarFile || !user || !profile) return;
+
+    setIsUploadingAvatar(true);
+
+    try {
+      const fileExt = avatarFile.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, avatarFile);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      // Update profile
+      const { error: updateError } = await supabase
+        .from('athlete_profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', profile.id);
+
+      if (updateError) throw updateError;
+
+      // Refetch profile
+      const { data: profileData } = await supabase
+        .from('athlete_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      setProfile(profileData);
+      setShowAvatarModal(false);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      alert('Failed to upload avatar');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  // Handle avatar removal
+  const handleAvatarRemove = async () => {
+    if (!profile || !user) return;
+
+    try {
+      // Delete old avatar from storage if exists
+      if (profile.avatar_url) {
+        const filePath = profile.avatar_url.split('/').pop();
+        if (filePath) {
+          await supabase.storage
+            .from('avatars')
+            .remove([`avatars/${filePath}`]);
+        }
+      }
+
+      // Update profile
+      const { error: updateError } = await supabase
+        .from('athlete_profiles')
+        .update({ avatar_url: null })
+        .eq('id', profile.id);
+
+      if (updateError) throw updateError;
+
+      // Refetch profile
+      const { data: profileData } = await supabase
+        .from('athlete_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      setProfile(profileData);
+    } catch (error) {
+      console.error('Error removing avatar:', error);
+      alert('Failed to remove avatar');
+    }
   };
 
   // Calculate performance metrics
@@ -729,27 +865,41 @@ export default function ProfilePage() {
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.3 }}
-                className="relative group"
+                className="relative"
               >
-                {profile.avatar_url ? (
-                  <img
-                    src={profile.avatar_url}
-                    alt={profile.full_name}
-                    className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover border-4 border-slate-700 shadow-xl"
-                  />
-                ) : (
-                  <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center border-4 border-slate-700 shadow-xl">
-                    <span className="text-3xl sm:text-4xl font-bold text-white">
-                      {profile.full_name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                )}
-                <button
-                  className="absolute bottom-0 right-0 w-8 h-8 sm:w-10 sm:h-10 bg-purple-500 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Change photo"
-                >
-                  <Camera className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                </button>
+                <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-slate-700 shadow-xl overflow-hidden bg-gradient-to-br from-blue-500 to-purple-600">
+                  {profile.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt={profile.full_name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <span className="text-4xl sm:text-5xl font-bold text-white">
+                        {getUserInitials(profile.full_name)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2 mt-3 justify-center">
+                  <button
+                    onClick={() => setShowAvatarModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-all text-sm"
+                  >
+                    <Camera className="w-4 h-4" />
+                    Change Photo
+                  </button>
+                  {profile.avatar_url && (
+                    <button
+                      onClick={handleAvatarRemove}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-all text-sm"
+                    >
+                      <X className="w-4 h-4" />
+                      Remove
+                    </button>
+                  )}
+                </div>
               </motion.div>
 
               {/* Name and Additional Info */}
@@ -1866,6 +2016,98 @@ export default function ProfilePage() {
           </div>
         </div>
       </main>
+
+      {/* Avatar Upload Modal */}
+      {showAvatarModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowAvatarModal(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.2 }}
+            className="bg-slate-800 rounded-2xl p-6 sm:p-8 max-w-md w-full border border-slate-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-white">Change Profile Photo</h3>
+              <button
+                onClick={() => setShowAvatarModal(false)}
+                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            {!avatarPreview ? (
+              <div
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+                className="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center hover:border-purple-500/50 transition-colors cursor-pointer"
+              >
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileSelect(file);
+                  }}
+                  className="hidden"
+                  id="avatar-upload"
+                />
+                <label htmlFor="avatar-upload" className="cursor-pointer">
+                  <Camera className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                  <p className="text-white font-medium mb-2">Click to upload or drag and drop</p>
+                  <p className="text-slate-400 text-sm">JPG, PNG, or WEBP (max 5MB)</p>
+                </label>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="relative w-32 h-32 mx-auto rounded-full overflow-hidden border-4 border-slate-700">
+                  <img
+                    src={avatarPreview}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex gap-3 justify-center">
+                  <button
+                    onClick={() => {
+                      setAvatarFile(null);
+                      setAvatarPreview(null);
+                    }}
+                    className="px-4 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAvatarUpload}
+                    disabled={isUploadingAvatar}
+                    className="px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-lg hover:from-purple-600 hover:to-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isUploadingAvatar ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Save Photo
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
     </div>
   );
 }
