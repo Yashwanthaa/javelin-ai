@@ -58,6 +58,24 @@ export default function GoalsPage() {
   const activeGoals = goals.filter(g => g.status === 'active').length;
   const completionRate = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
 
+  // Calculate overdue goals
+  const overdueGoals = goals.filter(g => {
+    if (g.status !== 'active') return false;
+    const deadline = new Date(g.deadline);
+    const today = new Date();
+    return deadline < today;
+  }).length;
+
+  // Calculate average progress for active goals
+  const averageProgress = goals.length > 0 ? Math.round(
+    goals.reduce((sum, goal) => {
+      const progress = goal.target_distance > 0 
+        ? (goal.current_distance / goal.target_distance) * 100 
+        : 0;
+      return sum + progress;
+    }, 0) / goals.length
+  ) : 0;
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
@@ -143,55 +161,117 @@ export default function GoalsPage() {
             </Link>
           </motion.div>
 
-          {/* Stats Cards */}
+          {/* Goal Progress Dashboard */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
+            className="mb-8"
           >
-            {/* Total Goals */}
-            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
-                  <Target className="w-6 h-6 text-purple-400" />
-                </div>
-                <h3 className="text-sm font-medium text-slate-400">Total Goals</h3>
-              </div>
-              <p className="text-3xl font-bold text-white">{totalGoals}</p>
-            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              {/* Summary Cards */}
+              <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Active Goals */}
+                <motion.div
+                  whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                  className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
+                      <Clock className="w-6 h-6 text-blue-400" />
+                    </div>
+                    <h3 className="text-sm font-medium text-slate-400">Active Goals</h3>
+                  </div>
+                  <p className="text-3xl font-bold text-white">{activeGoals}</p>
+                </motion.div>
 
-            {/* Completed Goals */}
-            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-green-400" />
-                </div>
-                <h3 className="text-sm font-medium text-slate-400">Completed</h3>
-              </div>
-              <p className="text-3xl font-bold text-white">{completedGoals}</p>
-            </div>
+                {/* Completed Goals */}
+                <motion.div
+                  whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                  className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
+                      <CheckCircle className="w-6 h-6 text-green-400" />
+                    </div>
+                    <h3 className="text-sm font-medium text-slate-400">Completed</h3>
+                  </div>
+                  <p className="text-3xl font-bold text-white">{completedGoals}</p>
+                </motion.div>
 
-            {/* Active Goals */}
-            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-blue-400" />
-                </div>
-                <h3 className="text-sm font-medium text-slate-400">Active</h3>
-              </div>
-              <p className="text-3xl font-bold text-white">{activeGoals}</p>
-            </div>
+                {/* Overdue Goals */}
+                <motion.div
+                  whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                  className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center">
+                      <AlertCircle className="w-6 h-6 text-red-400" />
+                    </div>
+                    <h3 className="text-sm font-medium text-slate-400">Overdue</h3>
+                  </div>
+                  <p className="text-3xl font-bold text-white">{overdueGoals}</p>
+                </motion.div>
 
-            {/* Completion Rate */}
-            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-orange-400" />
-                </div>
-                <h3 className="text-sm font-medium text-slate-400">Completion Rate</h3>
+                {/* Average Progress */}
+                <motion.div
+                  whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                  className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
+                      <TrendingUp className="w-6 h-6 text-purple-400" />
+                    </div>
+                    <h3 className="text-sm font-medium text-slate-400">Avg Progress</h3>
+                  </div>
+                  <p className="text-3xl font-bold text-white">{averageProgress}%</p>
+                </motion.div>
               </div>
-              <p className="text-3xl font-bold text-white">{completionRate}%</p>
+
+              {/* Circular Overall Progress */}
+              <motion.div
+                whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
+                className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 flex flex-col items-center justify-center hover:border-slate-700 transition-all duration-300"
+              >
+                <h3 className="text-sm font-medium text-slate-400 mb-4">Overall Progress</h3>
+                <div className="relative">
+                  <svg className="w-24 h-24 transform -rotate-90">
+                    <circle
+                      cx="48"
+                      cy="48"
+                      r="40"
+                      fill="none"
+                      stroke="#1e293b"
+                      strokeWidth="8"
+                    />
+                    <motion.circle
+                      cx="48"
+                      cy="48"
+                      r="40"
+                      fill="none"
+                      stroke="url(#gradient)"
+                      strokeWidth="8"
+                      strokeLinecap="round"
+                      initial={{ pathLength: 0 }}
+                      animate={{ pathLength: completionRate / 100 }}
+                      transition={{ duration: 1, ease: "easeInOut" }}
+                      style={{
+                        strokeDasharray: "251.2",
+                        strokeDashoffset: "251.2"
+                      }}
+                    />
+                    <defs>
+                      <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#a855f7" />
+                        <stop offset="100%" stopColor="#3b82f6" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xl font-bold text-white">{completionRate}%</span>
+                  </div>
+                </div>
+              </motion.div>
             </div>
           </motion.div>
 
