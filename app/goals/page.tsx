@@ -176,6 +176,57 @@ export default function GoalsPage() {
     return 'bg-red-500';
   };
 
+  // Calculate deadline countdown
+  const getDeadlineCountdown = (deadline: string) => {
+    const deadlineDate = new Date(deadline);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    deadlineDate.setHours(0, 0, 0, 0);
+    
+    const diffTime = deadlineDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) {
+      return { text: `Overdue by ${Math.abs(diffDays)} days`, color: 'red' };
+    } else if (diffDays === 0) {
+      return { text: 'Today', color: 'yellow' };
+    } else if (diffDays === 1) {
+      return { text: 'Tomorrow', color: 'yellow' };
+    } else if (diffDays <= 7) {
+      return { text: `${diffDays} days left`, color: 'yellow' };
+    } else {
+      return { text: `${diffDays} days left`, color: 'green' };
+    }
+  };
+
+  // Get countdown color class
+  const getCountdownColor = (color: string) => {
+    switch (color) {
+      case 'green':
+        return 'text-green-400';
+      case 'yellow':
+        return 'text-yellow-400';
+      case 'red':
+        return 'text-red-400';
+      default:
+        return 'text-slate-400';
+    }
+  };
+
+  // Get priority badge color
+  const getPriorityColor = (priority?: string) => {
+    switch (priority) {
+      case 'high':
+        return 'bg-red-500/20 text-red-400 border-red-500/30';
+      case 'medium':
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'low':
+        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      default:
+        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen bg-slate-950">
@@ -450,21 +501,44 @@ export default function GoalsPage() {
                 const progress = goal.target_distance > 0 
                   ? Math.round((goal.current_distance / goal.target_distance) * 100) 
                   : 0;
-                const daysUntil = Math.ceil((new Date(goal.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                const deadlineCountdown = getDeadlineCountdown(goal.deadline);
                 
                 return (
-                  <div
+                  <motion.div
                     key={goal.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
                     className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
                   >
-                    {/* Header */}
+                    {/* Header with Badges */}
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-white mb-2">{goal.title}</h3>
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border ${getStatusColor(goal.status)}`}>
-                          {getStatusIcon(goal.status)}
-                          {goal.status.charAt(0).toUpperCase() + goal.status.slice(1)}
-                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {/* Status Badge */}
+                          <motion.span
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.2, delay: 0.1 }}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border ${getStatusColor(goal.status)}`}
+                          >
+                            {getStatusIcon(goal.status)}
+                            {goal.status.charAt(0).toUpperCase() + goal.status.slice(1)}
+                          </motion.span>
+                          
+                          {/* Priority Badge */}
+                          {goal.priority && (
+                            <motion.span
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ duration: 0.2, delay: 0.15 }}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border ${getPriorityColor(goal.priority)}`}
+                            >
+                              {goal.priority.charAt(0).toUpperCase() + goal.priority.slice(1)}
+                            </motion.span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -492,14 +566,19 @@ export default function GoalsPage() {
                       <p className="text-right text-sm text-slate-400 mt-1">{progress}%</p>
                     </div>
 
-                    {/* Deadline */}
-                    <div className="flex items-center gap-2 text-sm">
+                    {/* Deadline Countdown */}
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.2, delay: 0.2 }}
+                      className="flex items-center gap-2 text-sm"
+                    >
                       <Calendar className="w-4 h-4 text-slate-400" />
-                      <span className="text-slate-400">
-                        {daysUntil > 0 ? `${daysUntil} days remaining` : daysUntil === 0 ? 'Due today' : 'Overdue'}
+                      <span className={getCountdownColor(deadlineCountdown.color)}>
+                        {deadlineCountdown.text}
                       </span>
-                    </div>
-                  </div>
+                    </motion.div>
+                  </motion.div>
                 );
               })}
             </div>
