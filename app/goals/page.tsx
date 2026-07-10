@@ -227,6 +227,32 @@ export default function GoalsPage() {
     }
   };
 
+  // Calculate milestone status
+  const getMilestones = (progress: number) => {
+    const milestones = [
+      { percentage: 25, label: '25%' },
+      { percentage: 50, label: '50%' },
+      { percentage: 75, label: '75%' },
+      { percentage: 100, label: '100%' },
+    ];
+    return milestones.map(m => ({
+      ...m,
+      completed: progress >= m.percentage
+    }));
+  };
+
+  // Get completion date from goal (if completed, use deadline as completion date)
+  const getCompletionDate = (goal: Goal) => {
+    if (goal.status === 'completed') {
+      return new Date(goal.deadline).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    }
+    return null;
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen bg-slate-950">
@@ -502,6 +528,9 @@ export default function GoalsPage() {
                   ? Math.round((goal.current_distance / goal.target_distance) * 100) 
                   : 0;
                 const deadlineCountdown = getDeadlineCountdown(goal.deadline);
+                const milestones = getMilestones(progress);
+                const completionDate = getCompletionDate(goal);
+                const isCompleted = progress >= 100 || goal.status === 'completed';
                 
                 return (
                   <motion.div
@@ -509,8 +538,28 @@ export default function GoalsPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+                    className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300 relative overflow-hidden"
                   >
+                    {/* Celebration Animation for 100% Completion */}
+                    {isCompleted && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.5, delay: 0.3 }}
+                        className="absolute inset-0 pointer-events-none"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-purple-500/10" />
+                        <motion.div
+                          initial={{ scale: 0, rotate: -180 }}
+                          animate={{ scale: 1.5, rotate: 0 }}
+                          transition={{ duration: 0.8, delay: 0.4 }}
+                          className="absolute top-2 right-2 w-8 h-8"
+                        >
+                          <CheckCircle className="w-full h-full text-green-400" />
+                        </motion.div>
+                      </motion.div>
+                    )}
+
                     {/* Header with Badges */}
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
@@ -538,6 +587,19 @@ export default function GoalsPage() {
                               {goal.priority.charAt(0).toUpperCase() + goal.priority.slice(1)}
                             </motion.span>
                           )}
+
+                          {/* Goal Completed Badge */}
+                          {isCompleted && completionDate && (
+                            <motion.span
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ duration: 0.3, delay: 0.4 }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border bg-green-500/20 text-green-400 border-green-500/30"
+                            >
+                              <CheckCircle className="w-3 h-3" />
+                              Completed {completionDate}
+                            </motion.span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -558,19 +620,51 @@ export default function GoalsPage() {
                         <span className="text-sm font-medium text-white">{goal.current_distance}m / {goal.target_distance}m</span>
                       </div>
                       <div className="w-full bg-slate-800 rounded-full h-2">
-                        <div
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min(progress, 100)}%` }}
+                          transition={{ duration: 0.8, ease: "easeOut" }}
                           className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(progress)}`}
-                          style={{ width: `${Math.min(progress, 100)}%` }}
                         />
                       </div>
                       <p className="text-right text-sm text-slate-400 mt-1">{progress}%</p>
+                    </div>
+
+                    {/* Milestone Timeline */}
+                    <div className="mb-4">
+                      <p className="text-sm text-slate-400 mb-3">Milestones</p>
+                      <div className="flex items-center justify-between gap-2">
+                        {milestones.map((milestone, index) => (
+                          <motion.div
+                            key={milestone.label}
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.3, delay: 0.2 + index * 0.1 }}
+                            className="flex flex-col items-center gap-1"
+                          >
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
+                                milestone.completed
+                                  ? 'bg-green-500/20 border-green-500 text-green-400'
+                                  : 'bg-slate-800 border-slate-700 text-slate-500'
+                              }`}
+                            >
+                              {milestone.completed ? (
+                                <CheckCircle className="w-4 h-4" />
+                              ) : (
+                                <span className="text-xs font-medium">{milestone.label}</span>
+                              )}
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
                     </div>
 
                     {/* Deadline Countdown */}
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      transition={{ duration: 0.2, delay: 0.2 }}
+                      transition={{ duration: 0.2, delay: 0.3 }}
                       className="flex items-center gap-2 text-sm"
                     >
                       <Calendar className="w-4 h-4 text-slate-400" />
