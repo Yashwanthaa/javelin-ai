@@ -5,9 +5,10 @@ import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import Sidebar from '@/components/dashboard/Sidebar';
 import TopNavbar from '@/components/dashboard/TopNavbar';
-import { Target, CheckCircle, Clock, AlertCircle, Plus, Award, TrendingUp, Calendar, Search, Filter, ChevronDown } from 'lucide-react';
+import { Target, CheckCircle, Clock, AlertCircle, Plus, Award, TrendingUp, Calendar, Search, Filter, ChevronDown, PieChart } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 interface Goal {
   id: string;
@@ -253,6 +254,29 @@ export default function GoalsPage() {
     return null;
   };
 
+  // Calculate analytics data
+  const goalCompletionRate = goals.length > 0 
+    ? Math.round((completedGoals / goals.length) * 100) 
+    : 0;
+
+  const goalsCompletedThisMonth = goals.filter(goal => {
+    if (goal.status !== 'completed') return false;
+    const completionDate = new Date(goal.deadline);
+    const now = new Date();
+    return (
+      completionDate.getMonth() === now.getMonth() &&
+      completionDate.getFullYear() === now.getFullYear()
+    );
+  }).length;
+
+  const hasInsufficientData = goals.length === 0;
+
+  // Data for Active vs Completed pie chart
+  const pieChartData = [
+    { name: 'Active', value: activeGoals, color: '#3b82f6' },
+    { name: 'Completed', value: completedGoals, color: '#22c55e' },
+  ].filter(item => item.value > 0);
+
   if (loading) {
     return (
       <div className="flex min-h-screen bg-slate-950">
@@ -419,11 +443,122 @@ export default function GoalsPage() {
             </div>
           </motion.div>
 
+          {/* Goal Analytics Dashboard */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="mb-6"
+          >
+            {hasInsufficientData ? (
+              <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-8 text-center">
+                <PieChart className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-white mb-2">Insufficient Data for Analytics</h3>
+                <p className="text-slate-400 text-sm">Create some goals to see your analytics dashboard</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Goal Completion Rate */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: 0.25 }}
+                  className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                      <CheckCircle className="w-5 h-5 text-green-400" />
+                    </div>
+                    <h3 className="text-sm font-medium text-slate-400">Completion Rate</h3>
+                  </div>
+                  <p className="text-3xl font-bold text-white">{goalCompletionRate}%</p>
+                  <p className="text-xs text-slate-400 mt-1">of all goals completed</p>
+                </motion.div>
+
+                {/* Average Goal Progress */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: 0.3 }}
+                  className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <h3 className="text-sm font-medium text-slate-400">Avg Progress</h3>
+                  </div>
+                  <p className="text-3xl font-bold text-white">{averageProgress}%</p>
+                  <p className="text-xs text-slate-400 mt-1">across all goals</p>
+                </motion.div>
+
+                {/* Goals Completed This Month */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: 0.35 }}
+                  className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                      <Calendar className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <h3 className="text-sm font-medium text-slate-400">This Month</h3>
+                  </div>
+                  <p className="text-3xl font-bold text-white">{goalsCompletedThisMonth}</p>
+                  <p className="text-xs text-slate-400 mt-1">goals completed</p>
+                </motion.div>
+
+                {/* Active vs Completed Chart */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: 0.4 }}
+                  className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center">
+                      <PieChart className="w-5 h-5 text-indigo-400" />
+                    </div>
+                    <h3 className="text-sm font-medium text-slate-400">Distribution</h3>
+                  </div>
+                  <div className="h-24">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartsPieChart>
+                        <Pie
+                          data={pieChartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={20}
+                          outerRadius={35}
+                          paddingAngle={2}
+                          dataKey="value"
+                        >
+                          {pieChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)', 
+                            border: '1px solid rgba(71, 85, 105, 0.5)',
+                            borderRadius: '8px',
+                            color: '#fff'
+                          }}
+                        />
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </motion.div>
+
           {/* Search, Filter, and Sort */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.15 }}
+            transition={{ duration: 0.5, delay: 0.25 }}
             className="mb-6"
           >
             <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
@@ -491,7 +626,7 @@ export default function GoalsPage() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
             >
             <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-12 text-center">
               <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -520,7 +655,7 @@ export default function GoalsPage() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
             >
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredGoals.map((goal) => {
