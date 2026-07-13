@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/dashboard/Sidebar';
 import TopNavbar from '@/components/dashboard/TopNavbar';
 import Link from 'next/link';
-import { ArrowLeft, Trash2, Calendar, MapPin, Cloud, Target, TrendingUp, Search, Filter, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Trash2, Calendar, MapPin, Cloud, Target, TrendingUp, Search, Filter, ChevronDown, Trophy, Award } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 
@@ -31,6 +31,8 @@ export default function PracticeHistoryPage() {
     totalSessions: 0,
     personalBest: 0,
     averageDistance: 0,
+    improvementSinceFirst: 0,
+    lastPracticeDate: null as string | null,
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
@@ -82,10 +84,21 @@ export default function PracticeHistoryPage() {
         const personalBest = Math.max(...distances);
         const averageDistance = distances.reduce((a, b) => a + b, 0) / totalSessions;
 
+        // Calculate improvement since first session
+        const firstSessionDistance = data[data.length - 1]?.distance || 0;
+        const improvementSinceFirst = firstSessionDistance > 0
+          ? Math.round(((personalBest - firstSessionDistance) / firstSessionDistance) * 100)
+          : 0;
+
+        // Get last practice date
+        const lastPracticeDate = data[0]?.session_date || null;
+
         setStats({
           totalSessions,
           personalBest,
           averageDistance: Math.round(averageDistance * 10) / 10,
+          improvementSinceFirst,
+          lastPracticeDate,
         });
       }
     } catch (error) {
@@ -193,42 +206,84 @@ export default function PracticeHistoryPage() {
             <p className="text-slate-400">View all your training sessions</p>
           </div>
 
-          {/* Summary Cards */}
+          {/* Performance Insights Card */}
           {!loading && sessions.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8">
-              {/* Total Sessions */}
-              <div className="group relative bg-gradient-to-br from-purple-500/10 to-purple-500/5 backdrop-blur-sm rounded-2xl border border-purple-500/20 p-6 hover:border-purple-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/10 hover:-translate-y-1">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                    <Calendar className="w-6 h-6 text-purple-400" />
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="mb-8"
+            >
+              <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                    <Award className="w-5 h-5 text-purple-400" />
                   </div>
+                  <h2 className="text-xl font-semibold text-white">Performance Insights</h2>
                 </div>
-                <div className="text-3xl font-bold text-white mb-1">{stats.totalSessions}</div>
-                <div className="text-slate-400 text-sm">Total Sessions</div>
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Personal Best Distance */}
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3, delay: 0.15 }}
+                    className="bg-slate-800/50 rounded-xl p-4"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Trophy className="w-4 h-4 text-yellow-400" />
+                      <span className="text-sm text-slate-400">Personal Best</span>
+                    </div>
+                    <p className="text-2xl font-bold text-white">{stats.personalBest.toFixed(1)}m</p>
+                  </motion.div>
 
-              {/* Personal Best */}
-              <div className="group relative bg-gradient-to-br from-blue-500/10 to-blue-500/5 backdrop-blur-sm rounded-2xl border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                    <Target className="w-6 h-6 text-blue-400" />
-                  </div>
-                </div>
-                <div className="text-3xl font-bold text-white mb-1">{stats.personalBest.toFixed(1)}m</div>
-                <div className="text-slate-400 text-sm">Personal Best</div>
-              </div>
+                  {/* Average Throw Distance */}
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3, delay: 0.2 }}
+                    className="bg-slate-800/50 rounded-xl p-4"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className="w-4 h-4 text-emerald-400" />
+                      <span className="text-sm text-slate-400">Average Distance</span>
+                    </div>
+                    <p className="text-2xl font-bold text-white">{stats.averageDistance.toFixed(1)}m</p>
+                  </motion.div>
 
-              {/* Average Distance */}
-              <div className="group relative bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 backdrop-blur-sm rounded-2xl border border-emerald-500/20 p-6 hover:border-emerald-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-1">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                    <TrendingUp className="w-6 h-6 text-emerald-400" />
-                  </div>
+                  {/* Improvement Since First Session */}
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3, delay: 0.25 }}
+                    className="bg-slate-800/50 rounded-xl p-4"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Target className="w-4 h-4 text-blue-400" />
+                      <span className="text-sm text-slate-400">Improvement</span>
+                    </div>
+                    <p className={`text-2xl font-bold ${stats.improvementSinceFirst >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {stats.improvementSinceFirst >= 0 ? '+' : ''}{stats.improvementSinceFirst}%
+                    </p>
+                  </motion.div>
+
+                  {/* Last Practice Date */}
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3, delay: 0.3 }}
+                    className="bg-slate-800/50 rounded-xl p-4"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Calendar className="w-4 h-4 text-purple-400" />
+                      <span className="text-sm text-slate-400">Last Practice</span>
+                    </div>
+                    <p className="text-2xl font-bold text-white">
+                      {stats.lastPracticeDate ? formatDate(stats.lastPracticeDate) : 'N/A'}
+                    </p>
+                  </motion.div>
                 </div>
-                <div className="text-3xl font-bold text-white mb-1">{stats.averageDistance.toFixed(1)}m</div>
-                <div className="text-slate-400 text-sm">Average Distance</div>
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* Search, Filter, and Sort */}
@@ -364,8 +419,21 @@ export default function PracticeHistoryPage() {
                         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 flex items-center justify-center">
                           <Target className="w-6 h-6 text-purple-400" />
                         </div>
-                        <div>
-                          <h3 className="text-xl font-bold text-white">{session.distance.toFixed(1)}m</h3>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-xl font-bold text-white">{session.distance.toFixed(1)}m</h3>
+                            {session.distance === stats.personalBest && (
+                              <motion.span
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ duration: 0.3 }}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
+                              >
+                                <Trophy className="w-3 h-3" />
+                                Personal Best
+                              </motion.span>
+                            )}
+                          </div>
                           <div className="flex items-center text-slate-400 text-sm">
                             <Calendar className="w-4 h-4 mr-1" />
                             {formatDate(session.session_date)}
