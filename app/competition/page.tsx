@@ -10,6 +10,9 @@ import {
   MapPin,
   Target,
   FileText,
+  Clock,
+  Award,
+  TrendingUp,
 } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
@@ -33,6 +36,12 @@ export default function CompetitionPage() {
   const [user, setUser] = useState<User | null>(null);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    upcoming: 0,
+    completed: 0,
+    bestResult: 0,
+    nextCompetitionDays: 0,
+  });
 
   useEffect(() => {
     fetchCompetitions();
@@ -62,6 +71,29 @@ export default function CompetitionPage() {
       if (error) throw error;
 
       setCompetitions(data || []);
+
+      // Calculate stats
+      if (data && data.length > 0) {
+        const upcoming = data.filter(c => c.status === 'upcoming').length;
+        const completed = data.filter(c => c.status === 'completed').length;
+        const bestResult = Math.max(...data.map(c => c.target_distance));
+        
+        // Find next upcoming competition
+        const upcomingCompetitions = data
+          .filter(c => c.status === 'upcoming')
+          .sort((a, b) => new Date(a.competition_date).getTime() - new Date(b.competition_date).getTime());
+        
+        const nextCompetitionDays = upcomingCompetitions.length > 0
+          ? Math.ceil((new Date(upcomingCompetitions[0].competition_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+          : 0;
+
+        setStats({
+          upcoming,
+          completed,
+          bestResult,
+          nextCompetitionDays: nextCompetitionDays > 0 ? nextCompetitionDays : 0,
+        });
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -164,6 +196,86 @@ export default function CompetitionPage() {
             Add Competition
           </Link>
         </div>
+
+        {/* Summary Cards */}
+        {!loading && competitions.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8"
+          >
+            {/* Upcoming Competitions */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.15 }}
+              className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                  <Calendar className="w-5 h-5 text-blue-400" />
+                </div>
+                <h3 className="text-sm font-medium text-slate-400">Upcoming</h3>
+              </div>
+              <p className="text-3xl font-bold text-white">{stats.upcoming}</p>
+              <p className="text-xs text-slate-400 mt-1">competitions</p>
+            </motion.div>
+
+            {/* Completed Competitions */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.2 }}
+              className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                  <Award className="w-5 h-5 text-green-400" />
+                </div>
+                <h3 className="text-sm font-medium text-slate-400">Completed</h3>
+              </div>
+              <p className="text-3xl font-bold text-white">{stats.completed}</p>
+              <p className="text-xs text-slate-400 mt-1">competitions</p>
+            </motion.div>
+
+            {/* Best Competition Result */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.25 }}
+              className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-purple-400" />
+                </div>
+                <h3 className="text-sm font-medium text-slate-400">Best Result</h3>
+              </div>
+              <p className="text-3xl font-bold text-white">{stats.bestResult}m</p>
+              <p className="text-xs text-slate-400 mt-1">target distance</p>
+            </motion.div>
+
+            {/* Next Competition Countdown */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.3 }}
+              className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all duration-300"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-orange-400" />
+                </div>
+                <h3 className="text-sm font-medium text-slate-400">Next Competition</h3>
+              </div>
+              <p className="text-3xl font-bold text-white">
+                {stats.nextCompetitionDays > 0 ? `${stats.nextCompetitionDays}d` : 'None'}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">until next event</p>
+            </motion.div>
+          </motion.div>
+        )}
 
         {competitions.length === 0 ? (
 
