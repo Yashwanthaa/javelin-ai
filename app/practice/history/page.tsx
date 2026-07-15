@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/dashboard/Sidebar';
 import TopNavbar from '@/components/dashboard/TopNavbar';
 import Link from 'next/link';
-import { ArrowLeft, Trash2, Calendar, MapPin, Cloud, Target, TrendingUp, Search, Filter, ChevronDown, Trophy, Award } from 'lucide-react';
+import { ArrowLeft, Trash2, Calendar, MapPin, Cloud, Target, TrendingUp, Search, Filter, ChevronDown, Trophy, Award, Download, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface PracticeSession {
   id: string;
@@ -37,6 +39,8 @@ export default function PracticeHistoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
   // Load filter and sort from localStorage on mount
   useEffect(() => {
@@ -139,6 +143,93 @@ export default function PracticeHistoryPage() {
       month: 'short',
       day: 'numeric',
     });
+  };
+
+  // Export functions
+  const exportToCSV = () => {
+    const dataToExport = filteredSessions.length > 0 ? filteredSessions : sessions;
+    
+    if (dataToExport.length === 0) return;
+
+    const headers = ['Date', 'Distance (m)', 'Location', 'Weather', 'Notes'];
+    const rows = dataToExport.map(session => [
+      formatDate(session.session_date),
+      session.distance.toFixed(1),
+      session.location || 'N/A',
+      session.weather || 'N/A',
+      session.notes || 'N/A',
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `practice-history-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setToastMessage('Exported to CSV successfully!');
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
+  const exportToPDF = () => {
+    const dataToExport = filteredSessions.length > 0 ? filteredSessions : sessions;
+    
+    if (dataToExport.length === 0) return;
+
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(18);
+    doc.setTextColor(100, 100, 100);
+    doc.text('Practice History', 14, 22);
+    
+    // Date
+    doc.setFontSize(10);
+    doc.setTextColor(150, 150, 150);
+    doc.text(`Exported on ${new Date().toLocaleDateString()}`, 14, 30);
+
+    // Table
+    const tableData = dataToExport.map(session => [
+      formatDate(session.session_date),
+      `${session.distance.toFixed(1)}m`,
+      session.location || 'N/A',
+      session.weather || 'N/A',
+      session.notes || 'N/A',
+    ]);
+
+    autoTable(doc, {
+      head: [['Date', 'Distance', 'Location', 'Weather', 'Notes']],
+      body: tableData,
+      startY: 40,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [168, 85, 247],
+        textColor: 255,
+        fontSize: 10,
+      },
+      bodyStyles: {
+        textColor: 100,
+        fontSize: 9,
+      },
+      styles: {
+        cellPadding: 3,
+      },
+    });
+
+    doc.save(`practice-history-${new Date().toISOString().split('T')[0]}.pdf`);
+
+    setToastMessage('Exported to PDF successfully!');
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
   };
 
   // Filter and sort sessions
@@ -352,6 +443,47 @@ export default function PracticeHistoryPage() {
             </p>
           </motion.div>
 
+          {/* Export Buttons */}
+          {!loading && sessions.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="mb-6"
+            >
+              <div className="flex gap-3">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={exportToCSV}
+                  disabled={filteredSessions.length === 0}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
+                    filteredSessions.length === 0
+                      ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed'
+                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 hover:border-emerald-500/50'
+                  }`}
+                >
+                  <Download className="w-4 h-4" />
+                  Export CSV
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={exportToPDF}
+                  disabled={filteredSessions.length === 0}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
+                    filteredSessions.length === 0
+                      ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed'
+                      : 'bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 hover:border-blue-500/50'
+                  }`}
+                >
+                  <Download className="w-4 h-4" />
+                  Export PDF
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+
           {/* Sessions List */}
           {loading ? (
             <div className="text-center py-12">
@@ -516,6 +648,21 @@ export default function PracticeHistoryPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Toast Notification */}
+      {showToast && (
+        <motion.div
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 50 }}
+          className="fixed bottom-6 right-6 z-50"
+        >
+          <div className="bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 flex items-center gap-3 shadow-lg">
+            <CheckCircle className="w-5 h-5 text-green-400" />
+            <span className="text-white text-sm">{toastMessage}</span>
+          </div>
+        </motion.div>
       )}
     </div>
   );
