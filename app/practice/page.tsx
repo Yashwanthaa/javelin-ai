@@ -4,10 +4,12 @@ import { useEffect, useState } from 'react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import TopNavbar from '@/components/dashboard/TopNavbar';
 import Link from 'next/link';
-import { Plus, History, Target, TrendingUp, Calendar, Award, BarChart3 } from 'lucide-react';
+import { Plus, History, Target, TrendingUp, Calendar, Award, BarChart3, Download, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface PracticeStats {
   totalSessions: number;
@@ -20,6 +22,11 @@ interface PracticeSession {
   id: string;
   session_date: string;
   distance: number;
+  release_angle: number | null;
+  weather: string | null;
+  wind_speed: number | null;
+  location: string | null;
+  notes: string | null;
 }
 
 type TimeRange = '7-sessions' | '30-days' | 'all-time';
@@ -34,6 +41,9 @@ export default function PracticePage() {
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<PracticeSession[]>([]);
   const [timeRange, setTimeRange] = useState<TimeRange>('7-sessions');
+  const [exportLoading, setExportLoading] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
     fetchStats();
@@ -46,7 +56,7 @@ export default function PracticePage() {
 
       const { data: sessions } = await supabase
         .from('practice_sessions')
-        .select('id, distance, session_date')
+        .select('id, distance, session_date, release_angle, weather, wind_speed, location, notes')
         .eq('user_id', user.id)
         .order('session_date', { ascending: true });
 
@@ -127,6 +137,118 @@ export default function PracticePage() {
   const chartStats = getChartStats(filteredSessions);
   const chartData = getChartData(filteredSessions);
   const hasInsufficientData = filteredSessions.length < 2;
+
+  // Export functions
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const exportToCSV = async () => {
+    if (filteredSessions.length === 0) return;
+    
+    setExportLoading(true);
+    
+    try {
+      const headers = ['Date', 'Throw Distance (m)', 'Release Angle (°)', 'Weather', 'Wind Speed (m/s)', 'Location', 'Notes'];
+      const rows = filteredSessions.map(session => [
+        formatDate(session.session_date),
+        session.distance.toFixed(1),
+        session.release_angle || 'N/A',
+        session.weather || 'N/A',
+        session.wind_speed || 'N/A',
+        session.location || 'N/A',
+        session.notes || 'N/A',
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `practice-sessions-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setToastMessage('Exported to CSV successfully!');
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const exportToPDF = async () => {
+    if (filteredSessions.length === 0) return;
+    
+    setExportLoading(true);
+    
+    try {
+      const doc = new jsPDF();
+      
+      // Title
+      doc.setFontSize(18);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Practice Sessions', 14, 22);
+      
+      // Date
+      doc.setFontSize(10);
+      doc.setTextColor(150, 150, 150);
+      doc.text(`Exported on ${new Date().toLocaleDateString()}`, 14, 30);
+
+      // Table
+      const tableData = filteredSessions.map(session => [
+        formatDate(session.session_date),
+        `${session.distance.toFixed(1)}m`,
+        session.release_angle ? `${session.release_angle}°` : 'N/A',
+        session.weather || 'N/A',
+        session.wind_speed ? `${session.wind_speed} m/s` : 'N/A',
+        session.location || 'N/A',
+        session.notes || 'N/A',
+      ]);
+
+      autoTable(doc, {
+        head: [['Date', 'Distance', 'Release Angle', 'Weather', 'Wind Speed', 'Location', 'Notes']],
+        body: tableData,
+        startY: 40,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [168, 85, 247],
+          textColor: 255,
+          fontSize: 8,
+        },
+        bodyStyles: {
+          textColor: 100,
+          fontSize: 7,
+        },
+        styles: {
+          cellPadding: 2,
+        },
+      });
+
+      doc.save(`practice-sessions-${new Date().toISOString().split('T')[0]}.pdf`);
+
+      setToastMessage('Exported to PDF successfully!');
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+    } finally {
+      setExportLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -296,6 +418,55 @@ export default function PracticePage() {
             )}
           </motion.div>
 
+          {/* Export Buttons */}
+          {!loading && stats.totalSessions > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.25 }}
+              className="mb-6"
+            >
+              <div className="flex gap-3">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={exportToCSV}
+                  disabled={filteredSessions.length === 0 || exportLoading}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
+                    filteredSessions.length === 0 || exportLoading
+                      ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed'
+                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 hover:border-emerald-500/50'
+                  }`}
+                >
+                  {exportLoading ? (
+                    <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  {exportLoading ? 'Exporting...' : 'Export CSV'}
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={exportToPDF}
+                  disabled={filteredSessions.length === 0 || exportLoading}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
+                    filteredSessions.length === 0 || exportLoading
+                      ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed'
+                      : 'bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 hover:border-blue-500/50'
+                  }`}
+                >
+                  {exportLoading ? (
+                    <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  {exportLoading ? 'Exporting...' : 'Export PDF'}
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+
           {/* Performance Trends */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -413,6 +584,21 @@ export default function PracticePage() {
           </motion.div>
         </div>
       </main>
+
+      {/* Toast Notification */}
+      {showToast && (
+        <motion.div
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 50 }}
+          className="fixed bottom-6 right-6 z-50"
+        >
+          <div className="bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 flex items-center gap-3 shadow-lg">
+            <CheckCircle className="w-5 h-5 text-green-400" />
+            <span className="text-white text-sm">{toastMessage}</span>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }
