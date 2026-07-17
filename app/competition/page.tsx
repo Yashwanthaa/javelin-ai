@@ -59,6 +59,7 @@ export default function CompetitionPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [sortBy, setSortBy] = useState('date-newest');
+  const [countdownDays, setCountdownDays] = useState(0);
 
   useEffect(() => {
     fetchCompetitions();
@@ -80,6 +81,28 @@ export default function CompetitionPage() {
   useEffect(() => {
     localStorage.setItem('competition-sort', sortBy);
   }, [sortBy]);
+
+  // Live countdown for nearest upcoming competition
+  useEffect(() => {
+    const updateCountdown = () => {
+      const upcomingCompetitions = competitions
+        .filter(c => c.status === 'upcoming')
+        .sort((a, b) => new Date(a.competition_date).getTime() - new Date(b.competition_date).getTime());
+      
+      if (upcomingCompetitions.length > 0) {
+        const nextCompetition = upcomingCompetitions[0];
+        const daysRemaining = Math.ceil((new Date(nextCompetition.competition_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+        setCountdownDays(daysRemaining > 0 ? daysRemaining : 0);
+      } else {
+        setCountdownDays(0);
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, [competitions]);
 
   async function fetchCompetitions() {
     try {
@@ -204,6 +227,36 @@ export default function CompetitionPage() {
   // Check if personal best
   const isPersonalBest = (competition: Competition) => {
     return competition.final_throw_distance === performanceStats.bestCompetitionResult;
+  };
+
+  // Get upcoming competitions sorted by date
+  const upcomingCompetitions = competitions
+    .filter(c => c.status === 'upcoming')
+    .sort((a, b) => new Date(a.competition_date).getTime() - new Date(b.competition_date).getTime());
+
+  // Get nearest upcoming competition
+  const nearestCompetition = upcomingCompetitions.length > 0 ? upcomingCompetitions[0] : null;
+
+  // Get days remaining for a competition
+  const getDaysRemaining = (competitionDate: string) => {
+    const days = Math.ceil((new Date(competitionDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    return days > 0 ? days : 0;
+  };
+
+  // Get status badge for timeline
+  const getTimelineStatus = (competitionDate: string) => {
+    const days = getDaysRemaining(competitionDate);
+    if (days === 0) return { text: 'Today', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' };
+    if (days === 1) return { text: 'Tomorrow', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' };
+    return { text: 'Upcoming', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' };
+  };
+
+  // Scroll to competition card
+  const scrollToCompetition = (competitionId: string) => {
+    const element = document.getElementById(`competition-${competitionId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   };
 
   // Filter and sort competitions
@@ -407,6 +460,134 @@ export default function CompetitionPage() {
               </p>
               <p className="text-xs text-slate-400 mt-1">until next event</p>
             </motion.div>
+          </motion.div>
+        )}
+
+        {/* Competition Timeline */}
+        {!loading && upcomingCompetitions.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.35 }}
+            className="mb-8"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                <Clock className="w-5 h-5 text-blue-400" />
+              </div>
+              <h2 className="text-xl font-semibold text-white">Competition Timeline</h2>
+            </div>
+
+            {/* Featured Card for Nearest Competition */}
+            {nearestCompetition && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4, delay: 0.4 }}
+                className="bg-gradient-to-r from-purple-500/20 to-blue-500/20 backdrop-blur-sm border border-purple-500/30 rounded-2xl p-6 mb-6"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getTimelineStatus(nearestCompetition.competition_date).color}`}>
+                        {getTimelineStatus(nearestCompetition.competition_date).text}
+                      </span>
+                      <span className="text-slate-400 text-sm">Next Competition</span>
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-1">{nearestCompetition.competition_name}</h3>
+                    <div className="flex items-center gap-4 text-slate-400 text-sm">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4" />
+                        {nearestCompetition.venue}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4" />
+                        {formatDate(nearestCompetition.competition_date)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-center sm:text-right">
+                    <p className="text-slate-400 text-sm mb-1">Days Remaining</p>
+                    <p className="text-4xl font-bold text-white">{countdownDays}</p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Vertical Timeline */}
+            <div className="relative pl-8">
+              {/* Timeline Line */}
+              <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gradient-to-b from-purple-500/50 to-blue-500/50" />
+
+              {upcomingCompetitions.map((competition, index) => {
+                const status = getTimelineStatus(competition.competition_date);
+                const days = getDaysRemaining(competition.competition_date);
+                
+                return (
+                  <motion.div
+                    key={competition.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, delay: 0.45 + index * 0.1 }}
+                    className="relative mb-6 last:mb-0 cursor-pointer group"
+                    onClick={() => scrollToCompetition(competition.id)}
+                  >
+                    {/* Timeline Dot */}
+                    <div className={`absolute left-[-20px] top-2 w-4 h-4 rounded-full border-2 ${
+                      index === 0 ? 'bg-purple-500 border-purple-500' : 'bg-slate-800 border-slate-600 group-hover:border-purple-500'
+                    } transition-colors duration-300`} />
+
+                    {/* Timeline Item */}
+                    <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-xl p-4 hover:border-purple-500/50 transition-all duration-300 group-hover:shadow-lg group-hover:shadow-purple-500/10">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div>
+                          <h4 className="text-lg font-semibold text-white mb-1">{competition.competition_name}</h4>
+                          <div className="flex items-center gap-3 text-slate-400 text-sm">
+                            <div className="flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />
+                              {competition.venue}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {formatDate(competition.competition_date)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${status.color}`}>
+                            {status.text}
+                          </span>
+                          <span className="text-slate-400 text-sm">{days}d</span>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Empty State for No Upcoming Competitions */}
+        {!loading && upcomingCompetitions.length === 0 && competitions.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.35 }}
+            className="mb-8"
+          >
+            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-12 text-center">
+              <Clock className="mx-auto w-16 h-16 text-slate-500 mb-6" />
+              <h2 className="text-3xl font-bold text-white mb-3">No upcoming competitions</h2>
+              <p className="text-slate-400 mb-8">Create a new competition to start planning your season</p>
+              <Link
+                href="/competition/new"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-xl transition-all duration-300 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40"
+              >
+                <Plus className="w-5 h-5" />
+                Create Competition
+              </Link>
+            </div>
           </motion.div>
         )}
 
@@ -687,6 +868,7 @@ export default function CompetitionPage() {
                 transition={{ duration: 0.3, delay: index * 0.05 }}
               >
                 <Link
+                  id={`competition-${competition.id}`}
                   href={`/competition/${competition.id}`}
                   className="group relative bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-6 hover:border-purple-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/10 hover:-translate-y-1 block cursor-pointer"
                 >
