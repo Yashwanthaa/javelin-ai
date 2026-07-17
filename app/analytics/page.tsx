@@ -59,7 +59,7 @@ interface AthleteProfile {
   created_at: string;
 }
 
-type DateRange = '7d' | '30d' | '90d' | 'all';
+type DateRange = '7d' | '30d' | '6m' | 'all';
 
 export default function AnalyticsPage() {
   const router = useRouter();
@@ -77,6 +77,7 @@ export default function AnalyticsPage() {
     thisWeekTrend: 0,
     thisMonthTrend: 0,
   });
+  const [totalCompetitions, setTotalCompetitions] = useState(0);
   const [loading, setLoading] = useState(true);
   const [hasData, setHasData] = useState(false);
   const [practices, setPractices] = useState<Practice[]>([]);
@@ -124,6 +125,7 @@ export default function AnalyticsPage() {
 
       setCompetitions(competitionsData || []);
       setProfile(profileData);
+      setTotalCompetitions(competitionsData?.length || 0);
 
       // Filter by date range
       let filteredPractices = practicesData || [];
@@ -135,9 +137,9 @@ export default function AnalyticsPage() {
         } else if (dateRange === '30d') {
           const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
           filteredPractices = practicesData.filter(p => new Date(p.date) >= thirtyDaysAgo);
-        } else if (dateRange === '90d') {
-          const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-          filteredPractices = practicesData.filter(p => new Date(p.date) >= ninetyDaysAgo);
+        } else if (dateRange === '6m') {
+          const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+          filteredPractices = practicesData.filter(p => new Date(p.date) >= sixMonthsAgo);
         }
       }
 
@@ -205,80 +207,39 @@ export default function AnalyticsPage() {
   const getChartData = () => {
     if (!practices || practices.length === 0) return null;
 
-    // Personal Best Progress - Line chart with PR highlights
-    const personalBestProgress = practices.map((p, index) => {
-      const isPR = index === 0 || p.best_throw > Math.max(...practices.slice(0, index).map(pr => pr.best_throw));
-      return {
-        date: new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        bestThrow: p.best_throw,
-        isPR,
-      };
-    });
-
-    // Average Throw Trend - Weekly and monthly averages
-    const weeklyAverages: { week: string; average: number }[] = [];
-    const now = new Date();
-    for (let i = 7; i >= 0; i--) {
-      const weekStart = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000);
-      const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const weekPractices = practices.filter(
-        p => new Date(p.date) >= weekStart && new Date(p.date) < weekEnd
-      );
-      const average = weekPractices.length > 0 
-        ? weekPractices.reduce((sum, p) => sum + p.average_throw, 0) / weekPractices.length 
-        : 0;
-      weeklyAverages.push({
-        week: weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        average: Math.round(average * 10) / 10,
-      });
-    }
-
-    // Training Volume - Sessions per week
-    const trainingVolume: { week: string; sessions: number }[] = [];
-    for (let i = 7; i >= 0; i--) {
-      const weekStart = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000);
-      const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const weekSessions = practices.filter(
-        p => new Date(p.date) >= weekStart && new Date(p.date) < weekEnd
-      ).length;
-      trainingVolume.push({
-        week: weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        sessions: weekSessions,
-      });
-    }
-
-    // Competition Performance - Grouped bars
-    const competitionPerformance = competitions
-      .filter(c => c.status === 'completed' && c.result_distance !== null)
-      .map(c => ({
-        name: c.competition_name,
-        target: profile?.target_distance || 0,
-        actual: c.result_distance || 0,
-        pb: profile?.personal_best || 0,
-      }));
-
-    // Throw Distribution - Histogram
-    const ranges = [
-      { name: '0-40m', min: 0, max: 40 },
-      { name: '40-50m', min: 40, max: 50 },
-      { name: '50-60m', min: 50, max: 60 },
-      { name: '60-70m', min: 60, max: 70 },
-      { name: '70-80m', min: 70, max: 80 },
-      { name: '80m+', min: 80, max: Infinity },
-    ];
-    const throwDistribution = ranges.map(range => ({
-      name: range.name,
-      value: practices.filter(p => p.best_throw >= range.min && p.best_throw < range.max).length,
+    // Throw Distance Progress Over Time - Line chart
+    const throwDistanceProgress = practices.map((p) => ({
+      date: new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+ throwDistance: p.best_throw,
     }));
 
-    const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
+    // Monthly Practice Sessions - Bar chart
+    const monthlyPracticeSessions: { month: string; sessions: number }[] = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      const monthPractices = practices.filter(
+        p => new Date(p.date) >= monthDate && new Date(p.date) < monthEnd
+      );
+      monthlyPracticeSessions.push({
+        month: monthDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+        sessions: monthPractices.length,
+      });
+    }
+
+    // Practice vs Competition Distribution - Pie chart
+    const distributionData = [
+      { name: 'Practice Sessions', value: stats.totalSessions },
+      { name: 'Competitions', value: totalCompetitions },
+    ];
+
+    const COLORS = ['#8b5cf6', '#3b82f6'];
 
     return {
-      personalBestProgress,
-      weeklyAverages,
-      trainingVolume,
-      competitionPerformance,
-      throwDistribution,
+      throwDistanceProgress,
+      monthlyPracticeSessions,
+      distributionData,
       COLORS,
     };
   };
@@ -406,7 +367,7 @@ export default function AnalyticsPage() {
                 >
                   <option value="7d">Last 7 Days</option>
                   <option value="30d">Last 30 Days</option>
-                  <option value="90d">Last 90 Days</option>
+                  <option value="6m">Last 6 Months</option>
                   <option value="all">All Time</option>
                 </select>
               </div>
@@ -447,107 +408,57 @@ export default function AnalyticsPage() {
               variants={containerVariants}
               initial="hidden"
               animate="visible"
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6"
             >
-              {/* Total Sessions */}
+              {/* Total Practice Sessions */}
               <motion.div variants={itemVariants} className="group relative bg-gradient-to-br from-purple-500/10 to-purple-500/5 backdrop-blur-sm rounded-2xl border border-purple-500/20 p-6 hover:border-purple-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/10 hover:scale-105 h-32 flex flex-col justify-between">
                 <div className="flex items-center justify-between">
                   <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
                     <Calendar className="w-6 h-6 text-purple-400" />
                   </div>
-                  <div className={`flex items-center text-sm font-semibold ${stats.totalSessionsTrend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {stats.totalSessionsTrend >= 0 ? <ArrowUp className="w-4 h-4 mr-1" /> : <ArrowDown className="w-4 h-4 mr-1" />}
-                    {Math.abs(stats.totalSessionsTrend).toFixed(1)}%
-                  </div>
                 </div>
                 <div>
                   <div className="text-3xl font-bold text-white mb-1">{stats.totalSessions}</div>
-                  <div className="text-slate-400 text-sm">Total Sessions</div>
+                  <div className="text-slate-400 text-sm">Total Practice Sessions</div>
                 </div>
               </motion.div>
 
-              {/* Personal Best */}
+              {/* Total Competitions */}
               <motion.div variants={itemVariants} className="group relative bg-gradient-to-br from-blue-500/10 to-blue-500/5 backdrop-blur-sm rounded-2xl border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10 hover:scale-105 h-32 flex flex-col justify-between">
                 <div className="flex items-center justify-between">
                   <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                    <Target className="w-6 h-6 text-blue-400" />
+                    <Trophy className="w-6 h-6 text-blue-400" />
                   </div>
-                  <div className={`flex items-center text-sm font-semibold ${stats.personalBestTrend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {stats.personalBestTrend >= 0 ? <ArrowUp className="w-4 h-4 mr-1" /> : <ArrowDown className="w-4 h-4 mr-1" />}
-                    {Math.abs(stats.personalBestTrend).toFixed(1)}%
+                </div>
+                <div>
+                  <div className="text-3xl font-bold text-white mb-1">{totalCompetitions}</div>
+                  <div className="text-slate-400 text-sm">Total Competitions</div>
+                </div>
+              </motion.div>
+
+              {/* Personal Best Throw */}
+              <motion.div variants={itemVariants} className="group relative bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 backdrop-blur-sm rounded-2xl border border-emerald-500/20 p-6 hover:border-emerald-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/10 hover:scale-105 h-32 flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                    <Target className="w-6 h-6 text-emerald-400" />
                   </div>
                 </div>
                 <div>
                   <div className="text-3xl font-bold text-white mb-1">{stats.personalBest.toFixed(1)}m</div>
-                  <div className="text-slate-400 text-sm">Personal Best</div>
+                  <div className="text-slate-400 text-sm">Personal Best Throw</div>
                 </div>
               </motion.div>
 
-              {/* Average Distance */}
-              <motion.div variants={itemVariants} className="group relative bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 backdrop-blur-sm rounded-2xl border border-emerald-500/20 p-6 hover:border-emerald-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/10 hover:scale-105 h-32 flex flex-col justify-between">
+              {/* Average Throw Distance */}
+              <motion.div variants={itemVariants} className="group relative bg-gradient-to-br from-amber-500/10 to-amber-500/5 backdrop-blur-sm rounded-2xl border border-amber-500/20 p-6 hover:border-amber-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/10 hover:scale-105 h-32 flex flex-col justify-between">
                 <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                    <TrendingUp className="w-6 h-6 text-emerald-400" />
-                  </div>
-                  <div className={`flex items-center text-sm font-semibold ${stats.averageDistanceTrend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {stats.averageDistanceTrend >= 0 ? <ArrowUp className="w-4 h-4 mr-1" /> : <ArrowDown className="w-4 h-4 mr-1" />}
-                    {Math.abs(stats.averageDistanceTrend).toFixed(1)}%
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                    <TrendingUp className="w-6 h-6 text-amber-400" />
                   </div>
                 </div>
                 <div>
                   <div className="text-3xl font-bold text-white mb-1">{stats.averageDistance.toFixed(1)}m</div>
-                  <div className="text-slate-400 text-sm">Average Distance</div>
-                </div>
-              </motion.div>
-
-              {/* Total Distance */}
-              <motion.div variants={itemVariants} className="group relative bg-gradient-to-br from-amber-500/10 to-amber-500/5 backdrop-blur-sm rounded-2xl border border-amber-500/20 p-6 hover:border-amber-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/10 hover:scale-105 h-32 flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                    <BarChart3 className="w-6 h-6 text-amber-400" />
-                  </div>
-                  <div className={`flex items-center text-sm font-semibold ${stats.totalDistanceTrend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {stats.totalDistanceTrend >= 0 ? <ArrowUp className="w-4 h-4 mr-1" /> : <ArrowDown className="w-4 h-4 mr-1" />}
-                    {Math.abs(stats.totalDistanceTrend).toFixed(1)}%
-                  </div>
-                </div>
-                <div>
-                  <div className="text-3xl font-bold text-white mb-1">{stats.totalDistance.toFixed(1)}m</div>
-                  <div className="text-slate-400 text-sm">Total Distance</div>
-                </div>
-              </motion.div>
-
-              {/* This Week Sessions */}
-              <motion.div variants={itemVariants} className="group relative bg-gradient-to-br from-pink-500/10 to-pink-500/5 backdrop-blur-sm rounded-2xl border border-pink-500/20 p-6 hover:border-pink-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-pink-500/10 hover:scale-105 h-32 flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-xl bg-pink-500/20 flex items-center justify-center">
-                    <Calendar className="w-6 h-6 text-pink-400" />
-                  </div>
-                  <div className={`flex items-center text-sm font-semibold ${stats.thisWeekTrend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {stats.thisWeekTrend >= 0 ? <ArrowUp className="w-4 h-4 mr-1" /> : <ArrowDown className="w-4 h-4 mr-1" />}
-                    {Math.abs(stats.thisWeekTrend).toFixed(1)}%
-                  </div>
-                </div>
-                <div>
-                  <div className="text-3xl font-bold text-white mb-1">{stats.thisWeekSessions}</div>
-                  <div className="text-slate-400 text-sm">This Week</div>
-                </div>
-              </motion.div>
-
-              {/* This Month Sessions */}
-              <motion.div variants={itemVariants} className="group relative bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 backdrop-blur-sm rounded-2xl border border-cyan-500/20 p-6 hover:border-cyan-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 hover:scale-105 h-32 flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-xl bg-cyan-500/20 flex items-center justify-center">
-                    <Calendar className="w-6 h-6 text-cyan-400" />
-                  </div>
-                  <div className={`flex items-center text-sm font-semibold ${stats.thisMonthTrend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {stats.thisMonthTrend >= 0 ? <ArrowUp className="w-4 h-4 mr-1" /> : <ArrowDown className="w-4 h-4 mr-1" />}
-                    {Math.abs(stats.thisMonthTrend).toFixed(1)}%
-                  </div>
-                </div>
-                <div>
-                  <div className="text-3xl font-bold text-white mb-1">{stats.thisMonthSessions}</div>
-                  <div className="text-slate-400 text-sm">This Month</div>
+                  <div className="text-slate-400 text-sm">Average Throw Distance</div>
                 </div>
               </motion.div>
             </motion.div>
@@ -568,14 +479,14 @@ export default function AnalyticsPage() {
                 </div>
               ) : chartData ? (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Personal Best Progress - Line Chart */}
+                  {/* Throw Distance Progress Over Time - Line Chart */}
                   <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6">
                     <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                      <Trophy className="w-5 h-5 mr-2 text-purple-400" />
-                      Personal Best Progress
+                      <TrendingUp className="w-5 h-5 mr-2 text-purple-400" />
+                      Throw Distance Progress Over Time
                     </h3>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <LineChart data={chartData.personalBestProgress}>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={chartData.throwDistanceProgress}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                         <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
                         <YAxis stroke="#94a3b8" fontSize={12} />
@@ -586,59 +497,26 @@ export default function AnalyticsPage() {
                         />
                         <Line 
                           type="monotone" 
-                          dataKey="bestThrow" 
+                          dataKey="throwDistance" 
                           stroke="#8b5cf6" 
                           strokeWidth={2} 
-                          dot={(props: any) => {
-                            const { payload } = props;
-                            return (
-                              <circle
-                                cx={props.cx}
-                                cy={props.cy}
-                                r={payload.isPR ? 6 : 4}
-                                fill={payload.isPR ? '#f59e0b' : '#8b5cf6'}
-                                stroke={payload.isPR ? '#f59e0b' : '#8b5cf6'}
-                                strokeWidth={2}
-                              />
-                            );
-                          }}
+                          dot={{ fill: '#8b5cf6' }}
                           animationDuration={1000} 
                         />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
 
-                  {/* Average Throw Trend - Line Chart */}
-                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6">
-                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                      <TrendingUp className="w-5 h-5 mr-2 text-blue-400" />
-                      Average Throw Trend (Weekly)
-                    </h3>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <LineChart data={chartData.weeklyAverages}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                        <XAxis dataKey="week" stroke="#94a3b8" fontSize={12} />
-                        <YAxis stroke="#94a3b8" fontSize={12} />
-                        <Tooltip
-                          contentStyle={{ backgroundColor: '#1e293b', border: '#334155', borderRadius: '8px' }}
-                          itemStyle={{ color: '#fff' }}
-                          formatter={(value: any) => `${value}m`}
-                        />
-                        <Line type="monotone" dataKey="average" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6' }} animationDuration={1000} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Training Volume - Bar Chart */}
+                  {/* Monthly Practice Sessions - Bar Chart */}
                   <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6">
                     <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
                       <Calendar className="w-5 h-5 mr-2 text-emerald-400" />
-                      Training Volume (Sessions/Week)
+                      Monthly Practice Sessions
                     </h3>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <BarChart data={chartData.trainingVolume}>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={chartData.monthlyPracticeSessions}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                        <XAxis dataKey="week" stroke="#94a3b8" fontSize={12} />
+                        <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} />
                         <YAxis stroke="#94a3b8" fontSize={12} />
                         <Tooltip
                           contentStyle={{ backgroundColor: '#1e293b', border: '#334155', borderRadius: '8px' }}
@@ -649,54 +527,37 @@ export default function AnalyticsPage() {
                     </ResponsiveContainer>
                   </div>
 
-                  {/* Competition Performance - Grouped Bar Chart */}
-                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6">
+                  {/* Practice vs Competition Distribution - Pie Chart */}
+                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6 lg:col-span-2">
                     <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                      <Award className="w-5 h-5 mr-2 text-amber-400" />
-                      Competition Performance
+                      <BarChart3 className="w-5 h-5 mr-2 text-blue-400" />
+                      Practice vs Competition Distribution
                     </h3>
-                    {chartData.competitionPerformance.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={250}>
-                        <BarChart data={chartData.competitionPerformance}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                          <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} />
-                          <YAxis stroke="#94a3b8" fontSize={12} />
+                    <div className="flex flex-col md:flex-row items-center justify-center gap-8">
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={chartData.distributionData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }: any) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                            animationDuration={1000}
+                          >
+                            {chartData.distributionData.map((entry: any, index: number) => (
+                              <Cell key={`cell-${index}`} fill={chartData.COLORS[index % chartData.COLORS.length]} />
+                            ))}
+                          </Pie>
                           <Tooltip
                             contentStyle={{ backgroundColor: '#1e293b', border: '#334155', borderRadius: '8px' }}
                             itemStyle={{ color: '#fff' }}
-                            formatter={(value: any) => `${value}m`}
                           />
-                          <Legend />
-                          <Bar dataKey="target" name="Target" fill="#64748b" animationDuration={1000} radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="actual" name="Actual" fill="#8b5cf6" animationDuration={1000} radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="pb" name="PB" fill="#f59e0b" animationDuration={1000} radius={[4, 4, 0, 0]} />
-                        </BarChart>
+                        </PieChart>
                       </ResponsiveContainer>
-                    ) : (
-                      <div className="flex items-center justify-center h-[250px] text-zinc-400">
-                        No completed competitions yet
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Throw Distribution - Histogram */}
-                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6 lg:col-span-2">
-                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                      <Target className="w-5 h-5 mr-2 text-pink-400" />
-                      Throw Distribution
-                    </h3>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <BarChart data={chartData.throwDistribution}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                        <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} />
-                        <YAxis stroke="#94a3b8" fontSize={12} />
-                        <Tooltip
-                          contentStyle={{ backgroundColor: '#1e293b', border: '#334155', borderRadius: '8px' }}
-                          itemStyle={{ color: '#fff' }}
-                        />
-                        <Bar dataKey="value" fill="#ec4899" animationDuration={1000} radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -707,84 +568,6 @@ export default function AnalyticsPage() {
                 </div>
               )}
             </motion.div>
-
-            {/* AI Performance Summary */}
-            {performanceSummary && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.6 }}
-                className="mt-8"
-              >
-                <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
-                  <Zap className="w-6 h-6 mr-2 text-purple-400" />
-                  AI Performance Summary
-                </h2>
-                <div className="bg-gradient-to-br from-purple-500/10 to-blue-500/10 backdrop-blur-sm rounded-2xl border border-purple-500/30 p-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {/* Strongest Month */}
-                    <div className="text-center">
-                      <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center mx-auto mb-3">
-                        <Trophy className="w-6 h-6 text-green-400" />
-                      </div>
-                      <p className="text-sm text-zinc-400 mb-1">Strongest Month</p>
-                      <p className="text-lg font-semibold text-white">
-                        {performanceSummary.strongestMonth 
-                          ? `${performanceSummary.strongestMonth.month} (${performanceSummary.strongestMonth.average}m)`
-                          : 'N/A'}
-                      </p>
-                    </div>
-
-                    {/* Weakest Month */}
-                    <div className="text-center">
-                      <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center mx-auto mb-3">
-                        <Target className="w-6 h-6 text-red-400" />
-                      </div>
-                      <p className="text-sm text-zinc-400 mb-1">Weakest Month</p>
-                      <p className="text-lg font-semibold text-white">
-                        {performanceSummary.weakestMonth 
-                          ? `${performanceSummary.weakestMonth.month} (${performanceSummary.weakestMonth.average}m)`
-                          : 'N/A'}
-                      </p>
-                    </div>
-
-                    {/* Most Consistent Period */}
-                    <div className="text-center">
-                      <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center mx-auto mb-3">
-                        <TrendingUp className="w-6 h-6 text-blue-400" />
-                      </div>
-                      <p className="text-sm text-zinc-400 mb-1">Most Consistent Period</p>
-                      <p className="text-lg font-semibold text-white">{performanceSummary.mostConsistentPeriod}</p>
-                    </div>
-
-                    {/* Improvement Rate */}
-                    <div className="text-center">
-                      <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center mx-auto mb-3">
-                        <ArrowUp className="w-6 h-6 text-amber-400" />
-                      </div>
-                      <p className="text-sm text-zinc-400 mb-1">Improvement Rate</p>
-                      <p className="text-lg font-semibold text-white">
-                        {performanceSummary.improvementRate > 0 ? '+' : ''}{performanceSummary.improvementRate}m/month
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Consistency Score */}
-                  <div className="mt-6 pt-6 border-t border-purple-500/20">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm font-medium text-white">Overall Consistency Score</span>
-                      <span className="text-lg font-bold text-purple-400">{performanceSummary.consistencyScore}%</span>
-                    </div>
-                    <div className="w-full bg-slate-800 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-300"
-                        style={{ width: `${performanceSummary.consistencyScore}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-            </motion.div>
-            )}
             </>
           )}
         </div>
