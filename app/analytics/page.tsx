@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/dashboard/Sidebar';
 import TopNavbar from '@/components/dashboard/TopNavbar';
 import Link from 'next/link';
-import { Target, TrendingUp, Calendar, BarChart3, Plus, ArrowUp, ArrowDown, Filter, Trophy, Award, Zap } from 'lucide-react';
+import { Target, TrendingUp, Calendar, BarChart3, Plus, ArrowUp, ArrowDown, Filter, Trophy, Award, Zap, Minus, Flame, Clock, Activity } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { motion } from 'framer-motion';
@@ -245,6 +245,129 @@ export default function AnalyticsPage() {
   };
 
   const chartData = getChartData();
+
+  // Performance Insights Calculation
+  const getPerformanceInsights = () => {
+    if (!practices || practices.length < 3) return null;
+
+    const sortedPractices = [...practices].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // Best Improvement Streak - consecutive sessions with improving best throws
+    let bestStreak = 0;
+    let currentStreak = 0;
+    for (let i = 1; i < sortedPractices.length; i++) {
+      if (sortedPractices[i].best_throw > sortedPractices[i - 1].best_throw) {
+        currentStreak++;
+        bestStreak = Math.max(bestStreak, currentStreak);
+      } else {
+        currentStreak = 0;
+      }
+    }
+
+    // Most Active Practice Month
+    const monthlySessions: { month: string; sessions: number }[] = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      const monthPractices = practices.filter(
+        p => new Date(p.date) >= monthDate && new Date(p.date) < monthEnd
+      );
+      monthlySessions.push({
+        month: monthDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+        sessions: monthPractices.length,
+      });
+    }
+    const mostActiveMonth = monthlySessions.length > 0
+      ? monthlySessions.reduce((max, m) => m.sessions > max.sessions ? m : max)
+      : null;
+
+    // Average Monthly Improvement (%)
+    const monthlyAverages: { month: string; average: number }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      const monthPractices = practices.filter(
+        p => new Date(p.date) >= monthDate && new Date(p.date) < monthEnd
+      );
+      if (monthPractices.length > 0) {
+        const average = monthPractices.reduce((sum, p) => sum + p.best_throw, 0) / monthPractices.length;
+        monthlyAverages.push({
+          month: monthDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+          average: Math.round(average * 10) / 10,
+        });
+      }
+    }
+    let avgMonthlyImprovement = 0;
+    if (monthlyAverages.length >= 2) {
+      const improvements: number[] = [];
+      for (let i = 1; i < monthlyAverages.length; i++) {
+        const improvement = ((monthlyAverages[i].average - monthlyAverages[i - 1].average) / monthlyAverages[i - 1].average) * 100;
+        improvements.push(improvement);
+      }
+      avgMonthlyImprovement = improvements.reduce((sum, val) => sum + val, 0) / improvements.length;
+    }
+
+    // Training Consistency Score (0-100) - based on regularity of practice
+    const gaps: number[] = [];
+    for (let i = 1; i < sortedPractices.length; i++) {
+      const gap = (new Date(sortedPractices[i].date).getTime() - new Date(sortedPractices[i - 1].date).getTime()) / (1000 * 60 * 60 * 24);
+      gaps.push(gap);
+    }
+    const avgGap = gaps.length > 0 ? gaps.reduce((sum, val) => sum + val, 0) / gaps.length : 0;
+    const gapVariance = gaps.length > 0 ? gaps.reduce((sum, val) => sum + Math.pow(val - avgGap, 2), 0) / gaps.length : 0;
+    const consistencyScore = Math.max(0, Math.min(100, 100 - (gapVariance / Math.pow(avgGap + 1, 2)) * 50));
+
+    // Longest Gap Between Practice Sessions
+    const longestGap = gaps.length > 0 ? Math.max(...gaps) : 0;
+
+    // Confidence badge based on data availability
+    const confidence = practices.length >= 20 ? 'High' : practices.length >= 10 ? 'Medium' : 'Low';
+
+    return {
+      bestImprovementStreak: bestStreak,
+      mostActiveMonth: mostActiveMonth?.month || 'N/A',
+      mostActiveMonthSessions: mostActiveMonth?.sessions || 0,
+      avgMonthlyImprovement: Math.round(avgMonthlyImprovement * 10) / 10,
+      trainingConsistencyScore: Math.round(consistencyScore),
+      longestGap: Math.round(longestGap),
+      confidence,
+    };
+  };
+
+  const performanceInsights = getPerformanceInsights();
+
+  const getConfidenceColor = (confidence: string) => {
+    switch (confidence) {
+      case 'High': return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'Medium': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'Low': return 'bg-red-500/20 text-red-400 border-red-500/30';
+      default: return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+    }
+  };
+
+  const getTrendIcon = (value: number) => {
+    if (value > 0) return <ArrowUp className="w-4 h-4 text-green-400" />;
+    if (value < 0) return <ArrowDown className="w-4 h-4 text-red-400" />;
+    return <Minus className="w-4 h-4 text-slate-400" />;
+  };
+
+  const getRecommendation = (insightType: string, value: any) => {
+    switch (insightType) {
+      case 'streak':
+        return value >= 3 ? 'Great momentum! Keep pushing.' : value >= 1 ? 'Building consistency.' : 'Focus on steady improvements.';
+      case 'active':
+        return value >= 8 ? 'Excellent training volume!' : value >= 4 ? 'Good consistency.' : 'Increase training frequency.';
+      case 'improvement':
+        return value >= 5 ? 'Outstanding progress!' : value >= 0 ? 'Positive trend.' : 'Review training approach.';
+      case 'consistency':
+        return value >= 70 ? 'Very consistent!' : value >= 50 ? 'Fairly consistent.' : 'Improve regularity.';
+      case 'gap':
+        return value <= 7 ? 'Great consistency!' : value <= 14 ? 'Manageable gaps.' : 'Reduce long breaks.';
+      default:
+        return 'Keep training!';
+    }
+  };
 
   // AI Performance Summary
   const getPerformanceSummary = () => {
@@ -565,6 +688,135 @@ export default function AnalyticsPage() {
                   <BarChart3 className="w-16 h-16 text-slate-600 mx-auto mb-4" />
                   <h3 className="text-xl font-semibold text-white mb-2">No chart data</h3>
                   <p className="text-slate-400">Unable to generate charts with current data.</p>
+                </div>
+              )}
+            </motion.div>
+
+            {/* Performance Insights Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.5 }}
+              className="mt-8"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-white flex items-center">
+                  <Zap className="w-6 h-6 mr-2 text-purple-400" />
+                  Performance Insights
+                </h2>
+                {performanceInsights && (
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getConfidenceColor(performanceInsights.confidence)}`}>
+                    Confidence: {performanceInsights.confidence}
+                  </span>
+                )}
+              </div>
+              {!performanceInsights ? (
+                <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-12 text-center">
+                  <Activity className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-white mb-2">More data needed for insights</h3>
+                  <p className="text-slate-400">Log at least 3 practice sessions to generate performance insights.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Best Improvement Streak */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.1 }}
+                    className="bg-gradient-to-br from-purple-500/10 to-purple-500/5 backdrop-blur-sm rounded-2xl border border-purple-500/20 p-6 hover:border-purple-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/10"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                        <Flame className="w-6 h-6 text-purple-400" />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {getTrendIcon(performanceInsights.bestImprovementStreak)}
+                      </div>
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">Best Improvement Streak</h3>
+                    <p className="text-3xl font-bold text-purple-400 mb-2">{performanceInsights.bestImprovementStreak} sessions</p>
+                    <p className="text-sm text-slate-400">{getRecommendation('streak', performanceInsights.bestImprovementStreak)}</p>
+                  </motion.div>
+
+                  {/* Most Active Practice Month */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.2 }}
+                    className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 backdrop-blur-sm rounded-2xl border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                        <Calendar className="w-6 h-6 text-blue-400" />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {getTrendIcon(performanceInsights.mostActiveMonthSessions - 4)}
+                      </div>
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">Most Active Month</h3>
+                    <p className="text-3xl font-bold text-blue-400 mb-2">{performanceInsights.mostActiveMonth}</p>
+                    <p className="text-sm text-slate-400">{performanceInsights.mostActiveMonthSessions} sessions • {getRecommendation('active', performanceInsights.mostActiveMonthSessions)}</p>
+                  </motion.div>
+
+                  {/* Average Monthly Improvement */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.3 }}
+                    className="bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 backdrop-blur-sm rounded-2xl border border-emerald-500/20 p-6 hover:border-emerald-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/10"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                        <TrendingUp className="w-6 h-6 text-emerald-400" />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {getTrendIcon(performanceInsights.avgMonthlyImprovement)}
+                      </div>
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">Avg Monthly Improvement</h3>
+                    <p className="text-3xl font-bold text-emerald-400 mb-2">{performanceInsights.avgMonthlyImprovement > 0 ? '+' : ''}{performanceInsights.avgMonthlyImprovement}%</p>
+                    <p className="text-sm text-slate-400">{getRecommendation('improvement', performanceInsights.avgMonthlyImprovement)}</p>
+                  </motion.div>
+
+                  {/* Training Consistency Score */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.4 }}
+                    className="bg-gradient-to-br from-amber-500/10 to-amber-500/5 backdrop-blur-sm rounded-2xl border border-amber-500/20 p-6 hover:border-amber-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/10"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                        <Activity className="w-6 h-6 text-amber-400" />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {getTrendIcon(performanceInsights.trainingConsistencyScore - 50)}
+                      </div>
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">Training Consistency</h3>
+                    <p className="text-3xl font-bold text-amber-400 mb-2">{performanceInsights.trainingConsistencyScore}/100</p>
+                    <p className="text-sm text-slate-400">{getRecommendation('consistency', performanceInsights.trainingConsistencyScore)}</p>
+                  </motion.div>
+
+                  {/* Longest Gap Between Sessions */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.5 }}
+                    className="bg-gradient-to-br from-pink-500/10 to-pink-500/5 backdrop-blur-sm rounded-2xl border border-pink-500/20 p-6 hover:border-pink-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-pink-500/10"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-pink-500/20 flex items-center justify-center">
+                        <Clock className="w-6 h-6 text-pink-400" />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {getTrendIcon(14 - performanceInsights.longestGap)}
+                      </div>
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">Longest Gap</h3>
+                    <p className="text-3xl font-bold text-pink-400 mb-2">{performanceInsights.longestGap} days</p>
+                    <p className="text-sm text-slate-400">{getRecommendation('gap', performanceInsights.longestGap)}</p>
+                  </motion.div>
                 </div>
               )}
             </motion.div>
