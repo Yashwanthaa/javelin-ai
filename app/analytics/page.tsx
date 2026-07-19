@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/dashboard/Sidebar';
 import TopNavbar from '@/components/dashboard/TopNavbar';
 import Link from 'next/link';
-import { Target, TrendingUp, Calendar, BarChart3, Plus, ArrowUp, ArrowDown, Filter, Trophy, Award, Zap, Minus, Flame, Clock, Activity } from 'lucide-react';
+import { Target, TrendingUp, Calendar, BarChart3, Plus, ArrowUp, ArrowDown, Filter, Trophy, Award, Zap, Minus, Flame, Clock, Activity, Medal, Star, Crown, Zap as Lightning } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { motion } from 'framer-motion';
@@ -368,6 +368,99 @@ export default function AnalyticsPage() {
         return 'Keep training!';
     }
   };
+
+  // Personal Records Calculation
+  const getPersonalRecords = () => {
+    if (!practices || practices.length === 0) return null;
+
+    const sortedPractices = [...practices].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // Lifetime Personal Best Throw
+    const lifetimePB = Math.max(...practices.map(p => p.best_throw));
+    const lifetimePBDate = practices.find(p => p.best_throw === lifetimePB)?.date || '';
+
+    // Season Best Throw (current year)
+    const currentYear = new Date().getFullYear();
+    const seasonPractices = practices.filter(p => new Date(p.date).getFullYear() === currentYear);
+    const seasonPB = seasonPractices.length > 0 ? Math.max(...seasonPractices.map(p => p.best_throw)) : 0;
+    const seasonPBDate = seasonPractices.find(p => p.best_throw === seasonPB)?.date || '';
+
+    // Most Improved Throw (biggest jump from previous session)
+    let mostImprovedThrow = 0;
+    let mostImprovedDate = '';
+    for (let i = 1; i < sortedPractices.length; i++) {
+      const improvement = sortedPractices[i].best_throw - sortedPractices[i - 1].best_throw;
+      if (improvement > mostImprovedThrow) {
+        mostImprovedThrow = improvement;
+        mostImprovedDate = sortedPractices[i].date;
+      }
+    }
+
+    // Longest Throwing Streak (consecutive practice days)
+    let longestStreak = 0;
+    let currentStreak = 0;
+    for (let i = 1; i < sortedPractices.length; i++) {
+      const daysDiff = (new Date(sortedPractices[i].date).getTime() - new Date(sortedPractices[i - 1].date).getTime()) / (1000 * 60 * 60 * 24);
+      if (daysDiff <= 1) {
+        currentStreak++;
+        longestStreak = Math.max(longestStreak, currentStreak);
+      } else {
+        currentStreak = 0;
+      }
+    }
+    longestStreak = Math.max(longestStreak, currentStreak) + 1;
+
+    // Total Personal Records Achieved (count of new PBs)
+    let totalRecords = 0;
+    let currentPB = 0;
+    for (const practice of sortedPractices) {
+      if (practice.best_throw > currentPB) {
+        totalRecords++;
+        currentPB = practice.best_throw;
+      }
+    }
+
+    // Milestone Badges
+    const milestones = [
+      { id: 'first-50m', name: 'First 50m Throw', achieved: lifetimePB >= 50, icon: 'Star', description: 'Achieved your first 50-meter throw' },
+      { id: 'first-60m', name: 'First 60m Throw', achieved: lifetimePB >= 60, icon: 'Award', description: 'Achieved your first 60-meter throw' },
+      { id: 'new-pb', name: 'New Personal Best', achieved: totalRecords >= 1, icon: 'Trophy', description: 'Set a new personal best record' },
+      { id: '10-competitions', name: '10 Competitions', achieved: totalCompetitions >= 10, icon: 'Medal', description: 'Completed 10 competitions' },
+      { id: '100-sessions', name: '100 Practice Sessions', achieved: stats.totalSessions >= 100, icon: 'Lightning', description: 'Completed 100 practice sessions' },
+    ];
+
+    // Record Progress Timeline (PB improvements over time)
+    const pbTimeline: { date: string; distance: number }[] = [];
+    let pbSoFar = 0;
+    for (const practice of sortedPractices) {
+      if (practice.best_throw > pbSoFar) {
+        pbSoFar = practice.best_throw;
+        pbTimeline.push({
+          date: new Date(practice.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          distance: pbSoFar,
+        });
+      }
+    }
+
+    // Most recent record
+    const mostRecentRecord = pbTimeline.length > 0 ? pbTimeline[pbTimeline.length - 1] : null;
+
+    return {
+      lifetimePB,
+      lifetimePBDate,
+      seasonPB,
+      seasonPBDate,
+      mostImprovedThrow,
+      mostImprovedDate,
+      longestStreak,
+      totalRecords,
+      milestones,
+      pbTimeline,
+      mostRecentRecord,
+    };
+  };
+
+  const personalRecords = getPersonalRecords();
 
   // AI Performance Summary
   const getPerformanceSummary = () => {
@@ -818,6 +911,194 @@ export default function AnalyticsPage() {
                     <p className="text-sm text-slate-400">{getRecommendation('gap', performanceInsights.longestGap)}</p>
                   </motion.div>
                 </div>
+              )}
+            </motion.div>
+
+            {/* Personal Records Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.6 }}
+              className="mt-8"
+            >
+              <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
+                <Crown className="w-6 h-6 mr-2 text-amber-400" />
+                Personal Records
+              </h2>
+              {!personalRecords ? (
+                <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-12 text-center">
+                  <Trophy className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-white mb-2">No records yet</h3>
+                  <p className="text-slate-400">Start logging practice sessions to track your personal records.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Featured Card - Most Recent Record */}
+                  {personalRecords.mostRecentRecord && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.5, delay: 0.1 }}
+                      className="bg-gradient-to-r from-purple-500/20 via-purple-500/10 to-blue-500/20 backdrop-blur-sm rounded-2xl border border-purple-500/30 p-6 mb-6 hover:border-purple-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/20"
+                    >
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-12 h-12 rounded-xl bg-purple-500/30 flex items-center justify-center">
+                          <Crown className="w-6 h-6 text-purple-400" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-white">Most Recent Record</h3>
+                          <p className="text-sm text-slate-400">Achieved on {personalRecords.mostRecentRecord.date}</p>
+                        </div>
+                      </div>
+                      <div className="text-4xl font-bold text-purple-400 mb-2">{personalRecords.mostRecentRecord.distance}m</div>
+                      <p className="text-sm text-slate-400">New Personal Best</p>
+                    </motion.div>
+                  )}
+
+                  {/* Record Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+                    {/* Lifetime Personal Best */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.2 }}
+                      className="bg-gradient-to-br from-amber-500/10 to-amber-500/5 backdrop-blur-sm rounded-2xl border border-amber-500/20 p-5 hover:border-amber-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/10 group"
+                      title={`Your all-time best throw achieved on ${personalRecords.lifetimePBDate}`}
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center mb-3">
+                        <Trophy className="w-5 h-5 text-amber-400" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-white mb-1">Lifetime PB</h3>
+                      <p className="text-2xl font-bold text-amber-400">{personalRecords.lifetimePB.toFixed(1)}m</p>
+                    </motion.div>
+
+                    {/* Season Best */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.25 }}
+                      className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 backdrop-blur-sm rounded-2xl border border-blue-500/20 p-5 hover:border-blue-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10 group"
+                      title={`Best throw this year achieved on ${personalRecords.seasonPBDate}`}
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center mb-3">
+                        <Star className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-white mb-1">Season Best</h3>
+                      <p className="text-2xl font-bold text-blue-400">{personalRecords.seasonPB.toFixed(1)}m</p>
+                    </motion.div>
+
+                    {/* Most Improved Throw */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.3 }}
+                      className="bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 backdrop-blur-sm rounded-2xl border border-emerald-500/20 p-5 hover:border-emerald-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/10 group"
+                      title={`Biggest improvement from previous session: +${personalRecords.mostImprovedThrow}m`}
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center mb-3">
+                        <TrendingUp className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-white mb-1">Most Improved</h3>
+                      <p className="text-2xl font-bold text-emerald-400">+{personalRecords.mostImprovedThrow.toFixed(1)}m</p>
+                    </motion.div>
+
+                    {/* Longest Streak */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.35 }}
+                      className="bg-gradient-to-br from-pink-500/10 to-pink-500/5 backdrop-blur-sm rounded-2xl border border-pink-500/20 p-5 hover:border-pink-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-pink-500/10 group"
+                      title={`Longest streak of consecutive practice days`}
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-pink-500/20 flex items-center justify-center mb-3">
+                        <Flame className="w-5 h-5 text-pink-400" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-white mb-1">Longest Streak</h3>
+                      <p className="text-2xl font-bold text-pink-400">{personalRecords.longestStreak} days</p>
+                    </motion.div>
+
+                    {/* Total Records */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.4 }}
+                      className="bg-gradient-to-br from-purple-500/10 to-purple-500/5 backdrop-blur-sm rounded-2xl border border-purple-500/20 p-5 hover:border-purple-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/10 group"
+                      title={`Total number of personal best records achieved`}
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center mb-3">
+                        <Medal className="w-5 h-5 text-purple-400" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-white mb-1">Total Records</h3>
+                      <p className="text-2xl font-bold text-purple-400">{personalRecords.totalRecords}</p>
+                    </motion.div>
+                  </div>
+
+                  {/* Milestone Badges */}
+                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6 mb-6">
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                      <Award className="w-5 h-5 mr-2 text-amber-400" />
+                      Milestone Badges
+                    </h3>
+                    <div className="flex flex-wrap gap-3">
+                      {personalRecords.milestones.map((milestone, index) => (
+                        <motion.div
+                          key={milestone.id}
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, delay: 0.5 + index * 0.1 }}
+                          className={`px-4 py-2 rounded-xl border flex items-center gap-2 transition-all duration-300 ${
+                            milestone.achieved
+                              ? 'bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border-amber-500/40'
+                              : 'bg-slate-800/50 border-slate-700/50 opacity-50'
+                          }`}
+                          title={milestone.description}
+                        >
+                          {milestone.icon === 'Star' && <Star className={`w-4 h-4 ${milestone.achieved ? 'text-amber-400' : 'text-slate-500'}`} />}
+                          {milestone.icon === 'Award' && <Award className={`w-4 h-4 ${milestone.achieved ? 'text-amber-400' : 'text-slate-500'}`} />}
+                          {milestone.icon === 'Trophy' && <Trophy className={`w-4 h-4 ${milestone.achieved ? 'text-amber-400' : 'text-slate-500'}`} />}
+                          {milestone.icon === 'Medal' && <Medal className={`w-4 h-4 ${milestone.achieved ? 'text-amber-400' : 'text-slate-500'}`} />}
+                          {milestone.icon === 'Lightning' && <Lightning className={`w-4 h-4 ${milestone.achieved ? 'text-amber-400' : 'text-slate-500'}`} />}
+                          <span className={`text-sm font-medium ${milestone.achieved ? 'text-white' : 'text-slate-500'}`}>{milestone.name}</span>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Record Progress Timeline */}
+                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6">
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                      <Activity className="w-5 h-5 mr-2 text-purple-400" />
+                      Record Progress Timeline
+                    </h3>
+                    {personalRecords.pbTimeline.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={200}>
+                        <LineChart data={personalRecords.pbTimeline}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                          <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
+                          <YAxis stroke="#94a3b8" fontSize={12} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#1e293b', border: '#334155', borderRadius: '8px' }}
+                            itemStyle={{ color: '#fff' }}
+                            formatter={(value: any) => `${value}m`}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="distance"
+                            stroke="#8b5cf6"
+                            strokeWidth={3}
+                            dot={{ fill: '#8b5cf6', r: 6 }}
+                            activeDot={{ r: 8 }}
+                            animationDuration={1000}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-[200px] text-slate-400">
+                        No record progress data available
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </motion.div>
             </>
